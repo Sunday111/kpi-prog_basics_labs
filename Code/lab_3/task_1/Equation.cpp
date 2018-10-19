@@ -37,6 +37,11 @@ constexpr FunctionInput GetPredefinedUserInput() noexcept {
     return FunctionInput{ -3.45f, 2.34f, 1.45f, 0.83f };
 }
 
+template<typename T>
+void PrintValue(std::ostream& output, const char* title, const T& value) {
+    output << title << result << std::endl;
+}
+
 int main() {
     constexpr bool PredefinedInput = true;
     std::ostream& output = std::cout;
@@ -45,7 +50,7 @@ int main() {
     const FunctionInput userInput =
         PredefinedInput ? (GetPredefinedUserInput()) : GetUserInput(input, output);
     const auto result = f7(userInput);
-    output << "Result: " << result << std::endl;
+    PrintValue(output, "Result: ", result);
 
     return 0;
 }

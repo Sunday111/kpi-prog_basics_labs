@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.5.1)
+include(generate_vs_filters)
+include(glob_cxx_sources)
+include(cxx_version)
+
+set(target_name "task_003_002")
+glob_cxx_sources(${CMAKE_CURRENT_SOURCE_DIR} target_sources)
+add_executable(${target_name} ${target_sources})
+generate_vs_filters(${target_sources})
+set_target_properties(${target_name} PROPERTIES FOLDER "Lab 3")
+require_cxx_version(${target_name} 17)
+disable_cxx_extensions(${target_name})

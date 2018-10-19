@@ -2,12 +2,14 @@
 #include <iostream>
 
 template<typename T>
-auto taskFunction(const T t, const size_t i) {
+T taskFunction(const T t, const size_t i) {
     if (i > 2) {
         T result{};
+
         for (size_t k = 1; k <= i; ++k) {
             result += 1 / k;
         }
+
         return result * std::sin(t);
     }
     return std::log(t);
@@ -26,14 +28,14 @@ int main() {
     auto& input = std::cin;
 
     auto t = AskUserForParameter<float>("t", output, input);
-    auto i = AskUserForParameter<size_t>("i", output, input);
+    auto i = AskUserForParameter<int>("i", output, input);
 
     if (i < 1) {
         output << "Invalid input parameter i. It should be more than zero" << std::endl;
         return 1;
     }
 
-    auto result = taskFunction(t, i);
+    auto result = taskFunction(t, static_cast<size_t>(i));
     output << "Result: " << result << std::endl;
 
     return 0;
