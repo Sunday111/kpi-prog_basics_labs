@@ -1,0 +1,19 @@
+cmake_minimum_required(VERSION 3.5.1)
+project(Labs)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/BuildTools/CMake/" CACHE STRING "")
+
+set(root_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+set(code_dir "${root_dir}/Code")
+set(bin_dir ${CMAKE_BINARY_DIR}/bin)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib/)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${bin_dir}/)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${bin_dir}/)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${bin_dir}/)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${bin_dir}/)
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+add_subdirectory(${code_dir})

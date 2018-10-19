@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.5.1)
+
+function(glob_cxx_sources sources_directory out_variable)
+    set(sources_extensions "h" "cpp")
+    set(local_out)
+    foreach(entry ${sources_extensions})
+        file(GLOB_RECURSE sources_by_ext "${sources_directory}/*.${entry}")
+        list(APPEND local_out "${sources_by_ext}")
+    endforeach()
+    set(${out_variable} "${local_out}" PARENT_SCOPE)
+endfunction()
