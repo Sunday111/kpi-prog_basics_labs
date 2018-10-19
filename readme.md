@@ -1,0 +1,1 @@
+py BuildTools/Python/regenerate
