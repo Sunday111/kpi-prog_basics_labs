@@ -39,7 +39,7 @@ constexpr FunctionInput GetPredefinedUserInput() noexcept {
 
 template<typename T>
 void PrintValue(std::ostream& output, const char* title, const T& value) {
-    output << title << result << std::endl;
+    output << title << value << std::endl;
 }
 
 int main() {
