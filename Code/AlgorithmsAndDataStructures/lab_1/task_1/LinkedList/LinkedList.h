@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <type_traits>
+#include <optional>
 #include "LinkedListFwdDecl.h"
 
 template<typename T, bool doublyLinked, bool storeTail>
@@ -12,12 +13,14 @@ public:
     using ConstIterator = linked_list_impl::ListIterator<T, doublyLinked, true>;
 
 public:
+    ~LinkedList();
+
     Iterator GetIterator();
     ConstIterator GetIterator() const;
 
     template<typename... Args>
     void EmplaceBack(Args&&... args);
-    void PopBack();
+    std::optional<T> PopBack();
 
 protected:
     using Node = linked_list_impl::LinkedListNode<T, doublyLinked>;

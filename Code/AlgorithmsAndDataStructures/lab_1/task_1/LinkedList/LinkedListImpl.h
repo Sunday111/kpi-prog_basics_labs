@@ -61,6 +61,14 @@ namespace linked_list_impl
     };
 }
 
+
+template<typename T, bool doublyLinked, bool storeTail>
+LinkedList<T, doublyLinked, storeTail>::~LinkedList() {
+    while (m_root) {
+        PopBack();
+    }
+}
+
 template<typename T, bool doublyLinked, bool storeTail>
 typename LinkedList<T, doublyLinked, storeTail>::Iterator
 LinkedList<T, doublyLinked, storeTail>::GetIterator() {
@@ -104,44 +112,48 @@ void LinkedList<T, doublyLinked, storeTail>::EmplaceBack(Args&&... args) {
 }
 
 template<typename T, bool doublyLinked, bool storeTail>
-void LinkedList<T, doublyLinked, storeTail>::PopBack() {
-    if (m_root == nullptr) {
-        return;
-    }
+std::optional<T> LinkedList<T, doublyLinked, storeTail>::PopBack() {
+    std::optional<T> result;
 
-    if constexpr (doublyLinked && storeTail) {
-        this->tail = this->tail->previous;
-        if (this->tail) {
-            this->tail->next = nullptr;
-        }
-        else {
-            m_root = nullptr;
-        }
-    }
-    else if constexpr (storeTail) {
-        // Only one element in the list
-        if (!m_root->next) {
-            m_root = nullptr;
-            this->tail = nullptr;
-        }
-        else {
-            Node* newTail = m_root.get();
-            while (newTail->next.get() != this->tail) {
-                newTail = newTail->next.get();
+    if (m_root != nullptr) {
+        if constexpr (doublyLinked && storeTail) {
+            this->tail = this->tail->previous;
+            if (this->tail) {
+                result = std::move(this->tail->next->data);
+                this->tail->next = nullptr;
             }
+            else {
+                result = std::move(m_root->data);
+                m_root = nullptr;
+            }
+        }
+        else {
+            // Only one element in the list
+            if (!m_root->next) {
+                result = std::move(m_root->data);
+                m_root = nullptr;
 
-            this->tail = newTail;
-            newTail->next = nullptr;
+                if constexpr (storeTail) {
+                    this->tail = nullptr;
+                }
+            }
+            else {
+                Node* newTail = m_root.get();
+                while (newTail->next->next != nullptr) {
+                    newTail = newTail->next.get();
+                }
+
+                result = std::move(newTail->next->data);
+                newTail->next = nullptr;
+
+                if constexpr (storeTail) {
+                    this->tail = newTail;
+                }
+            }
         }
     }
-    else {
-        std::unique_ptr<Node>* targ = &m_root;
-        while ((**targ).next) {
-            targ = &(**targ).next;
-        }
 
-        *targ = nullptr;
-    }
+    return result;
 }
 
 template<typename T, bool doublyLinked, bool storeTail>
