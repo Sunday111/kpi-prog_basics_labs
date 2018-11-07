@@ -1,5 +1,6 @@
 #include "Array/Array.h"
 #include "LinkedList/LinkedList.h"
+#include "Thread/ThreadPool.h"
 #include <cassert>
 #include <random>
 #include <vector>
@@ -60,34 +61,44 @@ template
 <
     template<typename> typename Layout,
     typename ValueGenerator,
-    typename TimeScale = std::chrono::milliseconds
+    typename TimeScale = std::chrono::milliseconds,
+    typename DurationType = long double
 >
 std::pair<long double, long double> StackProfile_PushPop(size_t repeats, size_t collection_size, ValueGenerator&& generator) {
     using value_type = decltype(generator());
-    long double push_total = 0.0;
-    long double pop_total = 0.0;
+    using JobResult = std::pair<TimeScale, TimeScale>;
+    ThreadPool<JobResult()> threadPool;
 
-    for (size_t r = 0; r < repeats; ++r) {
-        Layout<value_type> stack;
+    for (size_t i = 0; i < repeats; ++i) {
+        threadPool.AddJob([&]() {
+            Layout<value_type> stack;
 
-        auto push_duration = GetProcessDuration([&]() {
-            for (size_t i = 0; i < collection_size; ++i) {
-                stack.EmplaceBack(generator());
-            }
+            auto push_duration = GetProcessDuration([&]() {
+                for (size_t i = 0; i < collection_size; ++i) {
+                    stack.EmplaceBack(generator());
+                }
+            });
+
+            auto pop_duration = GetProcessDuration([&]() {
+                for (size_t i = 0; i < collection_size; ++i) {
+                    stack.PopBack();
+                }
+            });
+
+            return std::pair(push_duration, pop_duration);
         });
-
-        push_total += static_cast<long double>(push_duration.count()) / repeats;
-
-        auto pop_duration = GetProcessDuration([&]() {
-            for (size_t i = 0; i < collection_size; ++i) {
-                stack.PopBack();
-            }
-        });
-
-        pop_total += static_cast<long double>(pop_duration.count()) / repeats;
     }
 
-    return std::pair(push_total, pop_total);
+    threadPool.Start();
+    threadPool.Stop();
+
+    std::pair<DurationType, DurationType> result(0.0, 0.0);
+    threadPool.ForEachResult([&](JobResult& jobResult) {
+        result.first += static_cast<DurationType>(jobResult.first.count()) / repeats;
+        result.second += static_cast<DurationType>(jobResult.second.count()) / repeats;
+    });
+
+    return result;
 }
 
 struct NoCapacityPolicy
@@ -105,24 +116,32 @@ template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
 template<typename T> using StackArray_Capacity = Array<T, DefaultCapacityPolicy>;
 
 int main() {
-    StackTests<LinkedList_>();
-    StackTests<LinkedList_StoredTail>();
-    StackTests<DoublyLinkedList>();
-    StackTests<DoublyLinkedList_StoredTail>();
-    StackTests<StackArray>();
-    StackTests<StackArray_Capacity>();
+    //StackTests<LinkedList_>();
+    //StackTests<LinkedList_StoredTail>();
+    //StackTests<DoublyLinkedList>();
+    //StackTests<DoublyLinkedList_StoredTail>();
+    //StackTests<StackArray>();
+    //StackTests<StackArray_Capacity>();
 
-    //auto dummy_generator = []() {
-    //    return 10;
-    //};
-    //
-    //size_t constexpr pushesCount = 1000000;
-    //
-    //auto d1 = StackProfile_PushPop<LinkedList_>(1, pushesCount, dummy_generator);
-    //std::cout << "Simple linked list:\n";
-    //std::cout << "\tpush: " << d1.first << "ms \n";
-    //std::cout << "\tpop: " << d1.second << "ms \n";
-    //
+    constexpr size_t pushesCount = 1000;
+    constexpr size_t repeatsCount = 8;
+    constexpr int minValue = -100000;
+    constexpr int maxValue = 100000;
+    std::random_device rd;  //Will be used to obtain a seed for the random number engine
+    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+    std::uniform_int_distribution<> commandDistribution(0, 1);
+    std::uniform_int_distribution<> valueDistribution(minValue, maxValue);
+
+    auto dummy_generator = [&]() {
+        //return valueDistribution(gen);
+        return 10;
+    };
+
+    auto d1 = StackProfile_PushPop<LinkedList_>(repeatsCount, pushesCount, dummy_generator);
+    std::cout << "Simple linked list:\n";
+    std::cout << "\tpush: " << d1.first << "ms \n";
+    std::cout << "\tpop: " << d1.second << "ms \n";
+    
     //auto d2 = StackProfile_PushPop<DoublyLinkedList>(1, pushesCount, dummy_generator);
     //std::cout << "Doubly linked list:\n";
     //std::cout << "\tpush: " << d2.first << "ms \n";
@@ -143,7 +162,7 @@ int main() {
     //std::cout << "\tpush: " << d5.first << "ms \n";
     //std::cout << "\tpop: " << d5.second << "ms \n";
     //
-    //auto d6 = StackProfile_PushPop<StackArray_Capacity>(1, pushesCount, dummy_generator);
+    //auto d6 = StackProfile_PushPop<StackArray_Capacity>(repeatsCount, pushesCount, dummy_generator);
     //std::cout << "Stack array with capacity:\n";
     //std::cout << "\tpush: " << d6.first << "ms \n";
     //std::cout << "\tpop: " << d6.second << "ms \n";

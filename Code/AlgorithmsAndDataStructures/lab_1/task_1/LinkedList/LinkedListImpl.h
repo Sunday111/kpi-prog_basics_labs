@@ -129,7 +129,7 @@ std::optional<T> LinkedList<T, doublyLinked, storeTail>::PopBack() {
         }
         else {
             // Only one element in the list
-            if (!m_root->next) {
+            if (m_root->next == nullptr) {
                 result = std::move(m_root->data);
                 m_root = nullptr;
 
