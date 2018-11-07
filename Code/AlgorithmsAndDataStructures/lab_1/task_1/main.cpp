@@ -59,6 +59,36 @@ auto GetProcessDuration(F&& f) {
 
 template
 <
+    typename OnePassState,
+    typename TimeScale = std::chrono::milliseconds
+>
+class OperationProfiler
+{ 
+public:
+    struct Operation
+    {
+        std::string name;
+        std::function<TimeScale()> function;
+    };
+
+    struct OperationProfileInfo
+    {
+        std::string name;
+        TimeScale duration;
+    };
+
+    struct OnePassRessult
+    {
+        std::vector<OperationProfileInfo> operations;
+    };
+
+private:
+    ThreadPool<JobResult()> threadPool;
+    std::vector<std::function<()
+};
+
+template
+<
     template<typename> typename Layout,
     typename ValueGenerator,
     typename TimeScale = std::chrono::milliseconds,
