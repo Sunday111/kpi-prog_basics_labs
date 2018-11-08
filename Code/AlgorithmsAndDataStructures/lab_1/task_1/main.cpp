@@ -6,6 +6,7 @@
 #include <vector>
 #include <chrono>
 #include <iostream>
+#include <string>
 
 template<template<typename> typename Layout>
 void StackTests() {
@@ -49,7 +50,7 @@ void StackTests() {
     }
 }
 
-template<typename F, typename TimeScale = std::chrono::milliseconds>
+template<typename TimeScale = std::chrono::milliseconds, typename F>
 auto GetProcessDuration(F&& f) {
     auto start = std::chrono::high_resolution_clock::now();
     f();
@@ -60,81 +61,128 @@ auto GetProcessDuration(F&& f) {
 template
 <
     typename OnePassState,
-    typename TimeScale = std::chrono::milliseconds
+    typename TimeScale = std::chrono::milliseconds,
+    typename DurationType = long double
 >
 class OperationProfiler
 { 
 public:
+    using UserOperation = std::function<void(OnePassState&)>;
+
+    OperationProfiler(size_t desiredThreadsCount = 0) :
+        m_threadPool(desiredThreadsCount)
+    {}
+
     struct Operation
     {
         std::string name;
-        std::function<TimeScale()> function;
+        size_t repeatsCount = 1;
+        UserOperation function;
     };
 
-    struct OperationProfileInfo
-    {
-        std::string name;
-        TimeScale duration;
-    };
-
-    struct OnePassRessult
-    {
-        std::vector<OperationProfileInfo> operations;
-    };
-
-private:
-    ThreadPool<JobResult()> threadPool;
-    std::vector<std::function<()
-};
-
-template
-<
-    template<typename> typename Layout,
-    typename ValueGenerator,
-    typename TimeScale = std::chrono::milliseconds,
-    typename DurationType = long double
->
-std::pair<long double, long double> StackProfile_PushPop(size_t repeats, size_t collection_size, ValueGenerator&& generator) {
-    using value_type = decltype(generator());
-    using JobResult = std::pair<TimeScale, TimeScale>;
-    ThreadPool<JobResult()> threadPool;
-
-    for (size_t i = 0; i < repeats; ++i) {
-        threadPool.AddJob([&]() {
-            Layout<value_type> stack;
-
-            auto push_duration = GetProcessDuration([&]() {
-                for (size_t i = 0; i < collection_size; ++i) {
-                    stack.EmplaceBack(generator());
-                }
-            });
-
-            auto pop_duration = GetProcessDuration([&]() {
-                for (size_t i = 0; i < collection_size; ++i) {
-                    stack.PopBack();
-                }
-            });
-
-            return std::pair(push_duration, pop_duration);
-        });
+    void SetPassesCount(size_t passesCount) {
+        m_passesCount = passesCount;
     }
 
-    threadPool.Start();
-    threadPool.Stop();
+    void AddOperation(std::string name, UserOperation fn) {
+        Operation operation;
+        operation.name = std::move(name);
+        operation.function = std::move(fn);
+        m_algorithm.push_back(std::move(operation));
+    }
 
-    std::pair<DurationType, DurationType> result(0.0, 0.0);
-    threadPool.ForEachResult([&](JobResult& jobResult) {
-        result.first += static_cast<DurationType>(jobResult.first.count()) / repeats;
-        result.second += static_cast<DurationType>(jobResult.second.count()) / repeats;
-    });
+    struct OperationInfo
+    {
+        std::string name;
+        DurationType min = 0;
+        DurationType max = 0;
+        DurationType mean = 0;
+    };
 
-    return result;
-}
+    std::vector<OperationInfo> DoProfiling() {
+        m_threadPool.Start();
+        for (size_t i = 0; i < m_passesCount; ++i) {
+            m_threadPool.AddJob([&]() {
+                OnePassState state;
+                std::vector<TimeScale> result;
+                for (Operation& operation : m_algorithm) {
+                    TimeScale duration = GetProcessDuration<TimeScale>([&]() {
+                        operation.function(state);
+                    });
+                    result.push_back(duration);
+                }
+
+                return result;
+            });
+        }
+        m_threadPool.Stop();
+
+        std::vector<OperationInfo> operationsInfo;
+        operationsInfo.reserve(m_algorithm.size());
+
+        for (size_t i = 0; i < m_algorithm.size(); ++i) {
+            operationsInfo.emplace_back();
+            OperationInfo& operationInfo = operationsInfo[i];
+            operationInfo.name = m_algorithm[i].name;
+            operationInfo.min = std::numeric_limits<DurationType>::max();
+            operationInfo.max = std::numeric_limits<DurationType>::lowest();
+            operationInfo.mean = 0;
+        }
+
+        m_threadPool.ForEachResult([&](std::vector<TimeScale>& result) {
+            for (size_t i = 0; i < result.size(); ++i) {
+                OperationInfo& operationInfo = operationsInfo[i];
+                auto duration = static_cast<DurationType>(result[i].count());
+                operationInfo.min = std::min(operationInfo.min, duration);
+                operationInfo.max = std::max(operationInfo.max, duration);
+                operationInfo.mean += duration / m_passesCount;
+            }
+        });
+
+        return operationsInfo;
+    }
+
+private:
+    size_t m_passesCount = 1;
+    ThreadPool<std::vector<TimeScale>()> m_threadPool;
+    std::vector<Operation> m_algorithm;
+};
 
 struct NoCapacityPolicy
 {
     std::size_t GetNewCapacity(std::size_t requestedCapacity, std::size_t) {
         return requestedCapacity;
+    }
+};
+
+template<typename Element, size_t operations, size_t passes, size_t threads>
+struct StackProfiler
+{
+    template<template<typename> typename Layout>
+    static void StackPerfomance(std::string title) {
+        using StateType = Layout<Element>;
+        OperationProfiler<StateType> profiler(threads);
+        profiler.SetPassesCount(passes);
+        profiler.AddOperation("Pushes", [&](StateType& state) {
+            for (size_t i = 0; i < operations; ++i) {
+                state.EmplaceBack(10);
+            }
+        });
+        profiler.AddOperation("Pops", [&](StateType& state) {
+            for (size_t i = 0; i < operations; ++i) {
+                state.PopBack();
+            }
+        });
+
+        auto operationsInfo = profiler.DoProfiling();
+        std::cout << title << '\n';
+        for (auto& operationInfo : operationsInfo) {
+            std::cout << '\t' << operationInfo.name << '\n';
+            std::cout << "\t\tmin:  " << operationInfo.min << "ms\n";
+            std::cout << "\t\tmean: " << operationInfo.mean << "ms\n";
+            std::cout << "\t\tmax:  " << operationInfo.max << "ms\n";
+        }
+        std::cout << "\n";
     }
 };
 
@@ -146,56 +194,15 @@ template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
 template<typename T> using StackArray_Capacity = Array<T, DefaultCapacityPolicy>;
 
 int main() {
-    //StackTests<LinkedList_>();
-    //StackTests<LinkedList_StoredTail>();
-    //StackTests<DoublyLinkedList>();
-    //StackTests<DoublyLinkedList_StoredTail>();
-    //StackTests<StackArray>();
-    //StackTests<StackArray_Capacity>();
-
-    constexpr size_t pushesCount = 1000;
-    constexpr size_t repeatsCount = 8;
-    constexpr int minValue = -100000;
-    constexpr int maxValue = 100000;
-    std::random_device rd;  //Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_int_distribution<> commandDistribution(0, 1);
-    std::uniform_int_distribution<> valueDistribution(minValue, maxValue);
-
-    auto dummy_generator = [&]() {
-        //return valueDistribution(gen);
-        return 10;
-    };
-
-    auto d1 = StackProfile_PushPop<LinkedList_>(repeatsCount, pushesCount, dummy_generator);
-    std::cout << "Simple linked list:\n";
-    std::cout << "\tpush: " << d1.first << "ms \n";
-    std::cout << "\tpop: " << d1.second << "ms \n";
-    
-    //auto d2 = StackProfile_PushPop<DoublyLinkedList>(1, pushesCount, dummy_generator);
-    //std::cout << "Doubly linked list:\n";
-    //std::cout << "\tpush: " << d2.first << "ms \n";
-    //std::cout << "\tpop: " << d2.second << "ms \n";
-    //
-    //auto d3 = StackProfile_PushPop<LinkedList_StoredTail>(1, pushesCount, dummy_generator);
-    //std::cout << "Simple linked list with cached tail:\n";
-    //std::cout << "\tpush: " << d3.first << "ms \n";
-    //std::cout << "\tpop: " << d3.second << "ms \n";
-    //
-    //auto d4 = StackProfile_PushPop<DoublyLinkedList_StoredTail>(1, pushesCount, dummy_generator);
-    //std::cout << "Doubly linked list with cached tail:\n";
-    //std::cout << "\tpush: " << d4.first << "ms \n";
-    //std::cout << "\tpop: " << d4.second << "ms \n";
-    //
-    //auto d5 = StackProfile_PushPop<StackArray>(1, pushesCount, dummy_generator);
-    //std::cout << "Stack Array:\n";
-    //std::cout << "\tpush: " << d5.first << "ms \n";
-    //std::cout << "\tpop: " << d5.second << "ms \n";
-    //
-    //auto d6 = StackProfile_PushPop<StackArray_Capacity>(repeatsCount, pushesCount, dummy_generator);
-    //std::cout << "Stack array with capacity:\n";
-    //std::cout << "\tpush: " << d6.first << "ms \n";
-    //std::cout << "\tpop: " << d6.second << "ms \n";
-
+    constexpr size_t operations = 100000;
+    constexpr size_t passes = 100;
+    constexpr size_t threads = 1;
+    using Profiler = StackProfiler<int, operations, passes, threads>;
+    Profiler::StackPerfomance<LinkedList_>("Linked list");
+    Profiler::StackPerfomance<DoublyLinkedList>("Doubly linked list");
+    Profiler::StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail");
+    Profiler::StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail");
+    Profiler::StackPerfomance<StackArray>("Dummy dynamic array");
+    Profiler::StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory");
     return 0;
 }

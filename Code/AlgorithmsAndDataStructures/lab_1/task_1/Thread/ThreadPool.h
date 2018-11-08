@@ -14,14 +14,22 @@ public:
     using Job = std::function<JobResult()>;
 
 public:
+    ThreadPool(size_t threadsCount = 0) :
+        m_desiredThreadsCount(threadsCount)
+    {
+    }
+
     void AddJob(Job job) {
         std::lock_guard<std::mutex> guard(m_mutex);
         m_pending.push_back(std::move(job));
     }
 
     void Start() {
-        size_t pool_size = std::thread::hardware_concurrency();
-        pool_size = std::max(size_t(1), pool_size);
+        size_t pool_size = m_desiredThreadsCount;
+        if (pool_size == 0) {
+            size_t pool_size = std::thread::hardware_concurrency();
+            pool_size = std::max(size_t(1), pool_size);
+        }
         //pool_size = std::min(m_pending.size(), pool_size);
 
         for (size_t i = 0; i < pool_size; ++i) {
@@ -85,6 +93,7 @@ public:
 
 private:
     bool m_stopRequested = false;
+    size_t m_desiredThreadsCount = 0;
     std::mutex m_mutex;
     std::vector<Job> m_pending;
     std::vector<std::thread> m_workers;
