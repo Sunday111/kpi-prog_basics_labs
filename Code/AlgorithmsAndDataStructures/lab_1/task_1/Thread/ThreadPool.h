@@ -13,7 +13,8 @@ public:
     using Task = std::function<void()>;
 
 private:
-    struct thread_id {
+    struct thread_id
+    {
         size_t value;
     };
 
@@ -24,14 +25,8 @@ public:
     }
 
     void AddTask(Task task) {
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            m_pending.push(std::move(task));
-        }
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_newDataCV.notify_one();
-        }
+        std::lock_guard<std::mutex> guard(m_mutex);
+        m_pending.push(std::move(task));
     }
 
     void Start() {
@@ -46,66 +41,59 @@ public:
         m_done = false;
 
         for (size_t i = 0; i < threads_count; ++i) {
-            m_workers.emplace_back([&, id = thread_id{ i }]() {
-                auto log = [&](auto... args) {
+            m_workers.emplace_back(std::thread([&, id = thread_id{i}]() {
+                auto log = [&] (auto... args) {
                     Log(id, args...);
                 };
 
                 auto get_task = [&]() {
                     std::optional<Task> result;
-                    while (true) {
-                        std::unique_lock<std::mutex> lock(m_mutex);
-                        auto wait_result = m_newDataCV.wait_for(lock, 100ms);
-
-                        if (m_pending.empty()) {
-                            if (m_done) {
-                                break;
-                            }
-                            else {
-                                std::unique_lock<std::mutex> lock(m_noDataMutex);
-                                m_noDataCV.notify_all();
-                                log("Work not found");
-                                continue;
-                            }
-                        }
-
-                        if (wait_result == std::cv_status::timeout) {
-                            continue;
-                        }
-
+                    std::lock_guard<std::mutex> guard(m_mutex);
+                    if (!m_pending.empty()) {
                         result = std::move(m_pending.front());
                         m_pending.pop();
-                        break;
                     }
+
                     return result;
+                };
+
+                auto need_stop = [&]() {
+                    std::lock_guard<std::mutex> guard(m_mutex);
+                    return m_done;
                 };
 
                 while (true) {
                     std::optional<Task> task = get_task();
-                    if (!task.has_value()) {
-                        break;
+                    if (task.has_value()) {
+                        task.value()();
                     }
+                    else {
+                        if (need_stop()) {
+                            break;
+                        }
 
-                    task.value()();
+                        using namespace std::chrono_literals;
+                        std::this_thread::sleep_for(100ms);
+                    }
                 }
 
                 log("Exit");
-            });
+            }));
         }
     }
 
     void StopAndWait() {
         Log("Stop and wait begin");
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
+            std::lock_guard<std::mutex> guard(m_mutex);
             m_done = true;
         }
-        m_newDataCV.notify_all();
+
         for (auto& worker : m_workers) {
             worker.join();
         }
-        Log("Stop and wait end");
         m_workers.clear();
+        Log("Stop and wait end");
     }
 
     void Wait() {
@@ -113,15 +101,12 @@ public:
         Log("Wait begin");
         while (true) {
             {
-                std::unique_lock<std::mutex> lock(m_noDataMutex);
-                m_noDataCV.wait_for(lock, 100ms);
-            }
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
+                std::lock_guard<std::mutex> lock(m_mutex);
                 if (m_pending.empty()) {
                     break;
                 }
             }
+            std::this_thread::sleep_for(100ms);
         }
         Log("Wait end");
     }
@@ -152,16 +137,12 @@ private:
     }
 
 private:
-    bool m_done = false;
     Logger* m_logger = nullptr;
-    std::queue<Task> m_pending;
-    std::vector<std::thread> m_workers;
-    std::condition_variable m_newDataCV;
-    std::condition_variable m_noDataCV;
-    std::thread::id m_mainId;
-    size_t m_desiredThreadsCount = 0;
-
 
     std::mutex m_mutex;
-    std::mutex m_noDataMutex;
+    std::queue<Task> m_pending;
+    std::vector<std::thread> m_workers;
+    std::thread::id m_mainId;
+    size_t m_desiredThreadsCount = 0;
+    bool m_done = false;
 };

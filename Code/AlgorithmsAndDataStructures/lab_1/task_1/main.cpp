@@ -160,7 +160,7 @@ class StackProfiler
 public:
     StackProfiler(std::ostream& output) :
         m_logger(output),
-        m_threadPool(/*&m_logger*/)
+        m_threadPool(&m_logger)
     {
     }
 
