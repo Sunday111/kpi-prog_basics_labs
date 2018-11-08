@@ -62,6 +62,7 @@ auto GetProcessDuration(F&& f) {
 template
 <
     typename OnePassState,
+    typename Logger,
     typename TimeScale = std::chrono::milliseconds,
     typename DurationType = long double
 >
@@ -69,10 +70,6 @@ class OperationProfiler
 { 
 public:
     using UserOperation = std::function<void(OnePassState&)>;
-
-    OperationProfiler(size_t desiredThreadsCount = 0) :
-        m_threadPool(desiredThreadsCount)
-    {}
 
     struct Operation
     {
@@ -100,23 +97,25 @@ public:
         DurationType mean = 0;
     };
 
-    std::vector<OperationInfo> DoProfiling() {
-        m_threadPool.Start();
+    std::vector<OperationInfo> DoProfiling(ThreadPool<Logger>& threadPool) {
+        std::vector<std::vector<TimeScale>> passesInfo;
+        passesInfo.resize(m_passesCount);
+
         for (size_t i = 0; i < m_passesCount; ++i) {
-            m_threadPool.AddJob([&]() {
+            threadPool.AddTask([&, i]() {
                 OnePassState state;
-                std::vector<TimeScale> result;
+                std::vector<TimeScale> passInfo;
                 for (Operation& operation : m_algorithm) {
                     TimeScale duration = GetProcessDuration<TimeScale>([&]() {
                         operation.function(state);
                     });
-                    result.push_back(duration);
+                    passInfo.push_back(duration);
                 }
 
-                return result;
+                passesInfo[i] = std::move(passInfo);
             });
         }
-        m_threadPool.Stop();
+        threadPool.Wait();
 
         std::vector<OperationInfo> operationsInfo;
         operationsInfo.reserve(m_algorithm.size());
@@ -130,15 +129,15 @@ public:
             operationInfo.mean = 0;
         }
 
-        m_threadPool.ForEachResult([&](std::vector<TimeScale>& result) {
-            for (size_t i = 0; i < result.size(); ++i) {
+        for (std::vector<TimeScale>& passInfo : passesInfo) {
+            for (size_t i = 0; i < passInfo.size(); ++i) {
                 OperationInfo& operationInfo = operationsInfo[i];
-                auto duration = static_cast<DurationType>(result[i].count());
+                auto duration = static_cast<DurationType>(passInfo[i].count());
                 operationInfo.min = std::min(operationInfo.min, duration);
                 operationInfo.max = std::max(operationInfo.max, duration);
                 operationInfo.mean += duration / m_passesCount;
             }
-        });
+        }
 
         return operationsInfo;
     }
@@ -146,7 +145,6 @@ public:
 private:
     size_t m_passesCount = 1;
     std::vector<Operation> m_algorithm;
-    ThreadPool<std::vector<TimeScale>()> m_threadPool;
 };
 
 struct NoCapacityPolicy
@@ -156,17 +154,23 @@ struct NoCapacityPolicy
     }
 };
 
-template<typename Element, size_t operations, size_t passes, size_t threads>
-struct StackProfiler
+template<typename Element, typename Logger>
+class StackProfiler
 {
+public:
+    StackProfiler(std::ostream& output) :
+        m_logger(output),
+        m_threadPool(/*&m_logger*/)
+    {
+    }
+
     template
     <
-        template<typename> typename Layout,
-        typename Logger
+        template<typename> typename Layout
     >
-    static void StackPerfomance(std::string title, Logger& logger) {
+    void StackPerfomance(std::string title) {
         using StateType = Layout<Element>;
-        OperationProfiler<StateType> profiler(threads);
+        OperationProfiler<StateType, Logger> profiler;
         profiler.SetPassesCount(passes);
         profiler.AddOperation("Pushes", [&](StateType& state) {
             for (size_t i = 0; i < operations; ++i) {
@@ -179,16 +183,40 @@ struct StackProfiler
             }
         });
 
-        auto operationsInfo = profiler.DoProfiling();
-        logger.Write(title);
+        StartPool();
+
+        auto operationsInfo = profiler.DoProfiling(m_threadPool);
+        m_logger.Write(title);
         for (auto& operationInfo : operationsInfo) {
-            logger.Write('\t', operationInfo.name);
-            logger.Write("\t\tmin:  ", operationInfo.min, "ms");
-            logger.Write("\t\tmean:  ", operationInfo.mean, "ms");
-            logger.Write("\t\tmax:  ", operationInfo.max, "ms");
+            m_logger.Write('\t', operationInfo.name);
+            m_logger.Write("\t\tmin:  ", operationInfo.min, "ms");
+            m_logger.Write("\t\tmean:  ", operationInfo.mean, "ms");
+            m_logger.Write("\t\tmax:  ", operationInfo.max, "ms");
         }
-        std::cout << "\n";
+        m_logger.Write();
     }
+
+    ~StackProfiler() {
+        m_threadPool.StopAndWait();
+    }
+
+    size_t operations = 1;
+    size_t passes = 1;
+    size_t threads = 0;
+
+protected:
+    void StartPool() {
+        if (!m_poolStarted) {
+            m_threadPool.SetDesiredThreadsCount(threads);
+            m_threadPool.Start();
+            m_poolStarted = true;
+        }
+    }
+
+private:
+    bool m_poolStarted = false;
+    Logger m_logger;
+    ThreadPool<Logger> m_threadPool;
 };
 
 template<typename T> using LinkedList_ = LinkedList<T, false, false>;
@@ -199,18 +227,38 @@ template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
 template<typename T> using StackArray_Capacity = Array<T, DefaultCapacityPolicy>;
 
 int main() {
-    constexpr size_t operations = 100;
-    constexpr size_t passes = 100;
-    constexpr size_t threads = 0;
-    using Profiler = StackProfiler<int, operations, passes, threads>;
-
-    Log::Logger logger(std::cout);
-
-    Profiler::StackPerfomance<LinkedList_>("Linked list", logger);
-    Profiler::StackPerfomance<DoublyLinkedList>("Doubly linked list", logger);
-    Profiler::StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail", logger);
-    Profiler::StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail", logger);
-    Profiler::StackPerfomance<StackArray>("Dummy dynamic array", logger);
-    Profiler::StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory", logger);
-    return 0;
+    using Profiler = StackProfiler<int, Log::Logger<>>;
+    Profiler profiler(std::cout);
+    profiler.operations = 10;
+    profiler.passes = 100;
+    profiler.threads = 0;
+    
+    profiler.StackPerfomance<LinkedList_>("Linked list");
+    profiler.StackPerfomance<DoublyLinkedList>("Doubly linked list");
+    profiler.StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail");
+    profiler.StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail");
+    profiler.StackPerfomance<StackArray>("Dummy dynamic array");
+    profiler.StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory");
+    //using Logger = Log::Logger<>;
+    //using ThreadPool = ThreadPool<Logger>;
+    //
+    //constexpr size_t tasks_count = 40;
+    //
+    //Logger logger(std::cout);
+    //ThreadPool threadPool(&logger);
+    //threadPool.Start();
+    //for (size_t i = 0; i < tasks_count; ++i) {
+    //    logger.Write("Task ", i, " begins");
+    //    threadPool.AddTask([&, i] {
+    //        logger.Write("Task ", i, " begins");
+    //        const int s = 2000 + rand() % 2000;
+    //        std::this_thread::sleep_for(std::chrono::milliseconds(s));
+    //        logger.Write("Task ", i, " ends");
+    //    });
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    //}
+    //threadPool.StopAndWait();
+    //system("pause");
+    //
+    //return 0;
 }

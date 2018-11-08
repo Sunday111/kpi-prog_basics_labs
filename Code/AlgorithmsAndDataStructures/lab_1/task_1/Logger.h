@@ -8,7 +8,9 @@
 
 namespace Log::detail
 {
-    class Empty {};
+    class Empty
+    {
+    };
 
     class ThreadSafeLogger
     {
@@ -23,9 +25,9 @@ namespace Log::detail
 namespace Log
 {
     template
-    <
-        typename Clock = std::chrono::high_resolution_clock,
-        bool thread_safe = true
+        <
+        bool thread_safe = true,
+        typename Clock = std::chrono::high_resolution_clock
     >
     class Logger : protected detail::LoggerBase<thread_safe>
     {
@@ -64,8 +66,6 @@ namespace Log
             (m_output << ... << args);
             m_output << '\n';
         }
-
-
 
     protected:
         void WriteTime() {
