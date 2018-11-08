@@ -5,6 +5,6 @@ py BuildTools/Python/regenerate.py
 ```
 
 Requires:
-  C++ compiler with C++ 17 implementation
-  Python 3
-  CMake 3.5.1
+  + C++ compiler with C++ 17 implementation
+  + Python 3
+  + CMake 3.5.1
