@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iostream>
 #include <string>
+#include "Logger.h"
 
 template<template<typename> typename Layout>
 void StackTests() {
@@ -144,8 +145,8 @@ public:
 
 private:
     size_t m_passesCount = 1;
-    ThreadPool<std::vector<TimeScale>()> m_threadPool;
     std::vector<Operation> m_algorithm;
+    ThreadPool<std::vector<TimeScale>()> m_threadPool;
 };
 
 struct NoCapacityPolicy
@@ -158,8 +159,12 @@ struct NoCapacityPolicy
 template<typename Element, size_t operations, size_t passes, size_t threads>
 struct StackProfiler
 {
-    template<template<typename> typename Layout>
-    static void StackPerfomance(std::string title) {
+    template
+    <
+        template<typename> typename Layout,
+        typename Logger
+    >
+    static void StackPerfomance(std::string title, Logger& logger) {
         using StateType = Layout<Element>;
         OperationProfiler<StateType> profiler(threads);
         profiler.SetPassesCount(passes);
@@ -175,12 +180,12 @@ struct StackProfiler
         });
 
         auto operationsInfo = profiler.DoProfiling();
-        std::cout << title << '\n';
+        logger.Write(title);
         for (auto& operationInfo : operationsInfo) {
-            std::cout << '\t' << operationInfo.name << '\n';
-            std::cout << "\t\tmin:  " << operationInfo.min << "ms\n";
-            std::cout << "\t\tmean: " << operationInfo.mean << "ms\n";
-            std::cout << "\t\tmax:  " << operationInfo.max << "ms\n";
+            logger.Write('\t', operationInfo.name);
+            logger.Write("\t\tmin:  ", operationInfo.min, "ms");
+            logger.Write("\t\tmean:  ", operationInfo.mean, "ms");
+            logger.Write("\t\tmax:  ", operationInfo.max, "ms");
         }
         std::cout << "\n";
     }
@@ -194,15 +199,18 @@ template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
 template<typename T> using StackArray_Capacity = Array<T, DefaultCapacityPolicy>;
 
 int main() {
-    constexpr size_t operations = 100000;
+    constexpr size_t operations = 100;
     constexpr size_t passes = 100;
-    constexpr size_t threads = 1;
+    constexpr size_t threads = 0;
     using Profiler = StackProfiler<int, operations, passes, threads>;
-    Profiler::StackPerfomance<LinkedList_>("Linked list");
-    Profiler::StackPerfomance<DoublyLinkedList>("Doubly linked list");
-    Profiler::StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail");
-    Profiler::StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail");
-    Profiler::StackPerfomance<StackArray>("Dummy dynamic array");
-    Profiler::StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory");
+
+    Log::Logger logger(std::cout);
+
+    Profiler::StackPerfomance<LinkedList_>("Linked list", logger);
+    Profiler::StackPerfomance<DoublyLinkedList>("Doubly linked list", logger);
+    Profiler::StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail", logger);
+    Profiler::StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail", logger);
+    Profiler::StackPerfomance<StackArray>("Dummy dynamic array", logger);
+    Profiler::StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory", logger);
     return 0;
 }

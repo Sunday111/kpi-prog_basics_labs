@@ -27,10 +27,9 @@ public:
     void Start() {
         size_t pool_size = m_desiredThreadsCount;
         if (pool_size == 0) {
-            size_t pool_size = std::thread::hardware_concurrency();
+            pool_size = std::thread::hardware_concurrency();
             pool_size = std::max(size_t(1), pool_size);
         }
-        //pool_size = std::min(m_pending.size(), pool_size);
 
         for (size_t i = 0; i < pool_size; ++i) {
             m_workers.push_back(std::thread([this]() {
