@@ -8,9 +8,28 @@
 #include <iostream>
 #include <string>
 #include "Logger.h"
+#include <fstream>
+
+struct NoCapacityPolicy
+{
+    std::size_t GetNewCapacity(std::size_t requestedCapacity, std::size_t) {
+        return requestedCapacity;
+    }
+
+    static constexpr bool ShrinkToFitOnResize() {
+        return true;
+    }
+};
+
+template<typename T> using LinkedList_ = LinkedList<T, false, false>;
+template<typename T> using DoublyLinkedList = LinkedList<T, true, false>;
+template<typename T> using LinkedList_StoredTail = LinkedList<T, false, true>;
+template<typename T> using DoublyLinkedList_StoredTail = LinkedList<T, true, true>;
+template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
+template<typename T> using StackArray_Capacity = Array<T, DefaultArrayPolicy>;
 
 template<template<typename> typename Layout>
-void StackTests() {
+void StackTest() {
     constexpr size_t commandsCount = 100000;
     constexpr int minValue = -100000;
     constexpr int maxValue = 100000;
@@ -49,6 +68,23 @@ void StackTests() {
         }
         compareWithReference();
     }
+}
+
+void StackTests() {
+    using Logger = Log::Logger<>;
+    using ThreadPool = ThreadPool<Logger>;
+
+    Logger logger(std::cout);
+    ThreadPool threadPool(&logger);
+    threadPool.Start();
+    threadPool.SetDesiredThreadsCount(6);
+    threadPool.AddTask(StackTest<LinkedList_>);
+    threadPool.AddTask(StackTest<DoublyLinkedList>);
+    threadPool.AddTask(StackTest<LinkedList_StoredTail>);
+    threadPool.AddTask(StackTest<DoublyLinkedList_StoredTail>);
+    threadPool.AddTask(StackTest<StackArray>);
+    threadPool.AddTask(StackTest<StackArray_Capacity>);
+    threadPool.StopAndWait();
 }
 
 template<typename TimeScale = std::chrono::milliseconds, typename F>
@@ -147,13 +183,6 @@ private:
     std::vector<Operation> m_algorithm;
 };
 
-struct NoCapacityPolicy
-{
-    std::size_t GetNewCapacity(std::size_t requestedCapacity, std::size_t) {
-        return requestedCapacity;
-    }
-};
-
 template<typename Element, typename Logger>
 class StackProfiler
 {
@@ -219,46 +248,96 @@ private:
     ThreadPool<Logger> m_threadPool;
 };
 
-template<typename T> using LinkedList_ = LinkedList<T, false, false>;
-template<typename T> using DoublyLinkedList = LinkedList<T, true, false>;
-template<typename T> using LinkedList_StoredTail = LinkedList<T, false, true>;
-template<typename T> using DoublyLinkedList_StoredTail = LinkedList<T, true, true>;
-template<typename T> using StackArray = Array<T, NoCapacityPolicy>;
-template<typename T> using StackArray_Capacity = Array<T, DefaultCapacityPolicy>;
-
-int main() {
+void ProfileSpeedOfNContinuousOperations() {
     using Profiler = StackProfiler<int, Log::Logger<>>;
     Profiler profiler(std::cout);
-    profiler.operations = 10;
+    profiler.operations = 100000;
     profiler.passes = 100;
-    profiler.threads = 0;
-    
-    profiler.StackPerfomance<LinkedList_>("Linked list");
-    profiler.StackPerfomance<DoublyLinkedList>("Doubly linked list");
-    profiler.StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail");
-    profiler.StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail");
+    profiler.threads = 1;
+
+    //profiler.StackPerfomance<LinkedList_>("Linked list");
+    //profiler.StackPerfomance<DoublyLinkedList>("Doubly linked list");
+    //profiler.StackPerfomance<LinkedList_StoredTail>("Linked list with pointer to tail");
+    //profiler.StackPerfomance<DoublyLinkedList_StoredTail>("Doubly linked list with pointer to tail");
     profiler.StackPerfomance<StackArray>("Dummy dynamic array");
-    profiler.StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory");
-    //using Logger = Log::Logger<>;
-    //using ThreadPool = ThreadPool<Logger>;
-    //
-    //constexpr size_t tasks_count = 40;
-    //
-    //Logger logger(std::cout);
-    //ThreadPool threadPool(&logger);
-    //threadPool.Start();
-    //for (size_t i = 0; i < tasks_count; ++i) {
-    //    logger.Write("Task ", i, " begins");
-    //    threadPool.AddTask([&, i] {
-    //        logger.Write("Task ", i, " begins");
-    //        const int s = 2000 + rand() % 2000;
-    //        std::this_thread::sleep_for(std::chrono::milliseconds(s));
-    //        logger.Write("Task ", i, " ends");
-    //    });
-    //    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    //}
-    //threadPool.StopAndWait();
-    //system("pause");
-    //
-    //return 0;
+    //profiler.StackPerfomance<StackArray_Capacity>("Dynamic array with reserved memory");
+}
+
+template<typename Layout, typename Generator>
+void ProfileSpeedOfOneOperation(Generator generator, std::ostream& output) {
+    constexpr size_t operations = 1000;
+    constexpr size_t delta = 100;
+    using duration = std::chrono::nanoseconds;
+    std::vector<duration> pushes(operations);
+    std::vector<duration> pops(operations);
+
+    auto now = []() {
+        return std::chrono::high_resolution_clock::now();
+    };
+
+    auto start_time = now();
+
+    auto rel_time = [&] {
+        return std::chrono::duration_cast<duration>(now() - start_time);
+    };
+
+    Layout list;
+    for (size_t i = 0; i < operations; ++i) {
+        pushes[i] = GetProcessDuration<duration>([&]() {
+            for (size_t j = 0; j < delta; ++j) {
+                list.EmplaceBack(generator());
+            }
+        });
+    }
+
+    start_time = now();
+    for (int i = static_cast<int>(operations); i > 0; --i) {
+        pops[i - 1] = GetProcessDuration<duration>([&]() {
+            for (size_t j = 0; j < delta; ++j) {
+                list.PopBack();
+            }
+        });
+    }
+
+    for (size_t i = 0; i < operations; ++i) {
+        output << pushes[i].count() << ", " << pops[i].count() << '\n';
+    }
+}
+
+void StackProfileSpeedOfOneOperation() {
+    auto generator = []() { return 10; };
+
+    {
+        std::ofstream output("LinkedList.txt");
+        ProfileSpeedOfOneOperation<LinkedList_<int>>(generator, output);
+    }
+
+    {
+        std::ofstream output("DoublyLinkedList.txt");
+        ProfileSpeedOfOneOperation<DoublyLinkedList<int>>(generator, output);
+    }
+
+    {
+        std::ofstream output("LinkedList_StoredTail.txt");
+        ProfileSpeedOfOneOperation<LinkedList_StoredTail<int>>(generator, output);
+    }
+
+    {
+        std::ofstream output("DoublyLinkedList_StoredTail.txt");
+        ProfileSpeedOfOneOperation<DoublyLinkedList_StoredTail<int>>(generator, output);
+    }
+
+    {
+        std::ofstream output("StackArray.txt");
+        ProfileSpeedOfOneOperation<StackArray<int>>(generator, output);
+    }
+
+    {
+        std::ofstream output("StackArray_Capacity.txt");
+        ProfileSpeedOfOneOperation<StackArray_Capacity<int>>(generator, output);
+    }
+}
+
+int main() {
+    ProfileSpeedOfNContinuousOperations();
 }

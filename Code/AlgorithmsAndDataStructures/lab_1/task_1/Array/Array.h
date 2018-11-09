@@ -25,7 +25,7 @@ public:
     value_type* pointer = nullptr;
 };
 
-template<typename T, typename CapacityPolicy = DefaultCapacityPolicy>
+template<typename T, typename CapacityPolicy = DefaultArrayPolicy>
 class Array
 {
 public:

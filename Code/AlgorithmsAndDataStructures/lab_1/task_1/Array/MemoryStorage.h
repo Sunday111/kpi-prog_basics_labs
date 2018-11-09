@@ -5,28 +5,38 @@
 #include <cstdint>
 #include <memory>
 
-struct DefaultCapacityPolicy
+class DefaultArrayPolicy
 {
+protected:
     std::size_t GetNewCapacity(std::size_t requestedCapacity, std::size_t currentCapacity) {
         return std::max(requestedCapacity, currentCapacity + currentCapacity / 2);
     }
+
+    static constexpr bool ShrinkToFitOnResize() {
+        return false;
+    }
 };
 
-template<typename CapacityPolicy = DefaultCapacityPolicy>
-class MemoryStorage : public CapacityPolicy
+template<typename Policy = DefaultArrayPolicy>
+class MemoryStorage : public Policy
 {
 public:
     void Reserve(size_t requestedCapacity) {
-        if (requestedCapacity <= m_capacity) {
-            return;
+        if constexpr (!this->ShrinkToFitOnResize()) {
+            if (requestedCapacity <= m_capacity) {
+                return;
+            }
         }
 
         const std::size_t newCapacity = this->GetNewCapacity(requestedCapacity, m_capacity);
 
         std::unique_ptr<std::byte[]> newData;
-        newData.reset(new std::byte[newCapacity]);
-        if (m_size > 0) {
-            std::memcpy(newData.get(), m_data.get(), m_size);
+        if (newCapacity > 0) {
+            newData.reset(new std::byte[newCapacity]);
+            const size_t copySize = std::min(m_size, newCapacity);
+            if (m_size > 0) {
+                std::memcpy(newData.get(), m_data.get(), copySize);
+            }
         }
         std::swap(m_data, newData);
         m_capacity = newCapacity;

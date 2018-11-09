@@ -118,20 +118,29 @@ public:
 private:
     template<typename... Args>
     void Log(Args&&... args) {
-        if (m_logger) {
-            m_logger->Write("[ThreadPool] ", std::forward<Args>(args)...);
+        if constexpr (std::is_same_v<void, Logger>)
+        {
+            return;
+        }
+        else
+        {
+            if (m_logger) {
+                m_logger->Write("[ThreadPool] ", std::forward<Args>(args)...);
+            }
         }
     }
 
     template<typename... Args>
     void Log(thread_id id, Args&&... args) {
-        if (m_logger) {
-            const auto this_thread_id = std::this_thread::get_id();
-            if (this_thread_id == m_mainId) {
-                m_logger->Write("[ThreadPool] ", std::forward<Args>(args)...);
-            }
-            else {
-                m_logger->Write("[ThreadPool (", id.value, ")] ", std::forward<Args>(args)...);
+        if constexpr (!std::is_same_v<void, Logger>) {
+            if (m_logger) {
+                const auto this_thread_id = std::this_thread::get_id();
+                if (this_thread_id == m_mainId) {
+                    m_logger->Write("[ThreadPool] ", std::forward<Args>(args)...);
+                }
+                else {
+                    m_logger->Write("[ThreadPool (", id.value, ")] ", std::forward<Args>(args)...);
+                }
             }
         }
     }

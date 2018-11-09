@@ -2,7 +2,7 @@
 
 #include "MemoryStorage.h"
 
-template<size_t chunkSize, typename CapacityPolicy = DefaultCapacityPolicy>
+template<size_t chunkSize, typename Policy = DefaultArrayPolicy>
 class MemoryChunksStorage
 {
 public:
@@ -40,5 +40,5 @@ protected:
     }
 
 private:
-    MemoryStorage<CapacityPolicy> m_storage;
+    MemoryStorage<Policy> m_storage;
 };
