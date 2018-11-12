@@ -69,15 +69,17 @@ public:
             m_min = std::min(m_min, array[i]);
             m_max = std::max(m_max, array[i]);
         }
+        m_counts.resize(m_max - m_min + 1);
     }
 
     virtual void sort(T* array, size_t size) override final {
-        sort::counting_sort<T, Predicate>(array, size, m_min, m_max);
+        sort::counting_sort<T>(array, get_vector_data(m_counts), size, m_min, m_max);
     }
 
 private:
     T m_min = 0;
     T m_max = 0;
+    std::vector<T> m_counts;
 };
 
 template<typename T, typename Predicate>
@@ -165,10 +167,9 @@ private:
 
 int main() {
     using T = int;
-    using Limits = std::numeric_limits<T>;
-    using Clock = std::chrono::high_resolution_clock;
+    using clock = std::chrono::high_resolution_clock;
     using duration = std::chrono::nanoseconds;
-    using sort_predicate = std::less<T>;
+    using sort_predicate = std::greater<T>;
     using functor_adapter = sort_functor_adapter<T, sort_predicate>;
 
     std::random_device rd;
@@ -213,10 +214,6 @@ int main() {
     functors.push_back(std::make_unique<quick_sort_functor<T, sort_predicate>>());
     functors.push_back(std::make_unique<heap_sort_functor<T, sort_predicate>>());
 
-    sort_functor_adapter adpt{ *functors[4] };
-    std::vector<T> test{ 8, 5, 9, 4, 3 };
-    adpt.sort(test);
-
     auto print = [&output](auto... args) {
         (output << ... << args);
     };
@@ -226,9 +223,9 @@ int main() {
     };
 
     auto get_process_duration = [](auto&& fn) {
-        auto t1 = Clock::now();
+        auto t1 = clock::now();
         fn();
-        auto t2 = Clock::now();
+        auto t2 = clock::now();
         return std::chrono::duration_cast<duration>(t2 - t1);
     };
 
