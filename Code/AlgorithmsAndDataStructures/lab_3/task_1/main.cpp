@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <fstream>
 #include <random>
 #include <string>
 #include <string_view>
@@ -169,14 +170,17 @@ int main() {
     using T = int;
     using clock = std::chrono::high_resolution_clock;
     using duration = std::chrono::nanoseconds;
-    using sort_predicate = std::greater<T>;
+    using sort_predicate = std::less<T>;
     using functor_adapter = sort_functor_adapter<T, sort_predicate>;
 
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    constexpr size_t collectionSize = 10000;
-    std::ostream& output = std::cout;
+    std::ofstream file("output.txt");
+
+    constexpr size_t collectionSize = 50000;
+    std::ostream& log_stream = std::cout;
+    std::ostream& log_file = file;
 
     auto shuffle = [&gen](std::vector<T>& data) {
         std::shuffle(data.begin(), data.end(), gen);
@@ -214,8 +218,9 @@ int main() {
     functors.push_back(std::make_unique<quick_sort_functor<T, sort_predicate>>());
     functors.push_back(std::make_unique<heap_sort_functor<T, sort_predicate>>());
 
-    auto print = [&output](auto... args) {
-        (output << ... << args);
+    auto print = [&log_stream, &log_file](auto... args) {
+        (log_stream << ... << args);
+        (log_file << ... << args);
     };
 
     auto println = [&print](auto... args) {
