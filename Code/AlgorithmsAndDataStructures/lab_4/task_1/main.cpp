@@ -19,6 +19,7 @@
 #include "sort/quick_sort.h"
 #include "sort/merge_sort.h"
 #include "sort/heap_sort.h"
+#include "sort/radix_sort.h"
 
 template<typename T>
 T* get_vector_data(std::vector<T>& vec) {
@@ -143,6 +144,45 @@ public:
 };
 
 template<typename T, typename Predicate>
+class radix_sort_msd_functor :
+    public sort_functor<T, Predicate>
+{
+public:
+    virtual std::string_view get_name() const override final {
+        return "Radix Sort (MSD)";
+    }
+
+    virtual void update_cache(T*, size_t) override final {
+
+    }
+
+    virtual void sort(T* array, size_t size) override final {
+        sort::radix_sort_msd<T>(array, size);
+    }
+};
+
+template<typename T, typename Predicate>
+class radix_sort_lsd_functor :
+    public sort_functor<T, Predicate>
+{
+public:
+    virtual std::string_view get_name() const override final {
+        return "Radix Sort (LSD)";
+    }
+
+    virtual void update_cache(T*, size_t size) override final {
+        m_buffer.resize(size);
+    }
+
+    virtual void sort(T* array, size_t size) override final {
+        sort::radix_sort_lsd<T>(array, m_buffer.data(), size);
+    }
+
+private:
+    std::vector<T> m_buffer;
+};
+
+template<typename T, typename Predicate>
 class sort_functor_adapter
 {
 public:
@@ -217,6 +257,8 @@ int main() {
     functors.push_back(std::make_unique<merge_sort_functor<T, sort_predicate>>());
     functors.push_back(std::make_unique<quick_sort_functor<T, sort_predicate>>());
     functors.push_back(std::make_unique<heap_sort_functor<T, sort_predicate>>());
+    functors.push_back(std::make_unique<radix_sort_msd_functor<T, sort_predicate>>());
+    functors.push_back(std::make_unique<radix_sort_lsd_functor<T, sort_predicate>>());
 
     auto print = [&log_stream, &log_file](auto... args) {
         (log_stream << ... << args);
