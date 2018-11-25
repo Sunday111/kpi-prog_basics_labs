@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "ClosedHashMap.h"
-#include "OpenHashMap.h"
 
 template
 <
@@ -59,19 +58,25 @@ constexpr bool validateHashMap = true;
 constexpr bool validateHashMap = false;
 #endif
 
-int main(int, char**) {
-    using T = double;
-    using Duration = std::chrono::nanoseconds;
-    using DurationU = long double;
-    using Clock = std::chrono::high_resolution_clock;
+using Key = size_t;
+using Value = double;
+using Duration = std::chrono::nanoseconds;
+using DurationU = long double;
+using Clock = std::chrono::high_resolution_clock;
 
-    constexpr size_t valuesCount = 100000;
-    constexpr size_t stepsCount = 200;
-    constexpr size_t valuesPerStep = valuesCount / stepsCount;
+template<typename Probing>
+using HashMap = ClosedHashMap<Key, Value, KnuthMultiplicativeMethod<Key>, Probing>;
+
+void Main() {
+    const size_t valuesCount = std::numeric_limits<uint16_t>::max() + 1;
+    const size_t stepsCount = 256;
+    const size_t valuesPerStep = valuesCount / stepsCount;
     constexpr size_t keyAbsoluteValue = std::numeric_limits<size_t>::max();
-    constexpr auto maxBucketsCount = std::numeric_limits<uint16_t>::max();
+    constexpr auto maxBucketsCount = size_t(std::numeric_limits<uint16_t>::max()) + 1;
+    constexpr const char split = ';';
+    constexpr size_t hasBytesCount = 2;
 
-    size_t keyMinValues[]{
+    constexpr size_t keyMinValues[]{
         0,
         0,
         0,
@@ -95,7 +100,7 @@ int main(int, char**) {
         keyAbsoluteValue / 10000000000,
     };
 
-    size_t keyMaxValues[]{
+    constexpr size_t keyMaxValues[]{
         keyAbsoluteValue,
         keyAbsoluteValue / 10,
         keyAbsoluteValue / 100,
@@ -122,8 +127,6 @@ int main(int, char**) {
     static_assert(sizeof(keyMaxValues) == sizeof(keyMinValues));
     const size_t passesCount = sizeof(keyMaxValues) / sizeof(keyMaxValues[0]);
 
-    constexpr const char split = ';';
-
     std::random_device rd;
     std::mt19937 gen(rd());
     std::ostream& output = std::cout;
@@ -146,20 +149,20 @@ int main(int, char**) {
     std::vector<std::vector<std::pair<DurationU, DurationU>>> addDurations(passesCount);
     std::vector<std::vector<std::pair<DurationU, DurationU>>> findDurations(passesCount);
     for (size_t pass = 0; pass < passesCount; ++pass) {
-        std::vector<std::pair<size_t, T>> pairs;
-        std::uniform_int_distribution<size_t> keyDistribution(keyMinValues[pass], keyMaxValues[pass]);
-        std::uniform_real_distribution<double> valueDistribution(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max());
+        std::vector<std::pair<Key, Value>> pairs;
+        std::uniform_int_distribution<Key> keyDistribution(keyMinValues[pass], keyMaxValues[pass]);
+        std::uniform_real_distribution<Value> valueDistribution(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max());
         pairs.reserve(valuesCount);
         {
             // generate keys for the whole pass
             for (size_t i = 0; i < valuesCount; ++i) {
                 // Make unique and random key
                 auto it = pairs.begin();
-                size_t key;
+                Key key;
                 do
                 {
                     key = keyDistribution(gen);
-                    it = std::lower_bound(pairs.begin(), pairs.end(), key, [](auto& p1, size_t key) {
+                    it = std::lower_bound(pairs.begin(), pairs.end(), key, [](auto& p1, Key key) {
                         return p1.first < key;
                     });
                 } while (it != pairs.end() && it->first == key);
@@ -172,13 +175,15 @@ int main(int, char**) {
             std::shuffle(pairs.begin(), pairs.end(), gen);
         }
 
-        OpenHashMap<size_t, T, KnuthMultiplicativeMethod<size_t>> map_a(maxBucketsCount);
-        OpenHashMap<size_t, T, FirstNBitsHasher<size_t>> map_b(maxBucketsCount);
+        HashMap<LinearProbingCollisionPolicy> map_a(hasBytesCount);
+        HashMap<QuadraticProbingCollisionPolicy> map_b(hasBytesCount);
         auto& passEmplaceDurations = addDurations[pass];
         auto& passFindDurations = findDurations[pass];
-        for (size_t step = 0; step < stepsCount; ++step) {
+        for (size_t step = 0; step < stepsCount - 1; ++step) {
             const size_t pairsBegin = valuesPerStep * step;
-            const size_t pairsEnd = pairsBegin + valuesPerStep;
+            const size_t minCapacity = std::min(map_a.GetCapacity(), map_b.GetCapacity());
+            const size_t pairsEnd = std::min(pairsBegin + valuesPerStep, minCapacity);
+            const size_t valuesOnStep = pairsEnd - pairsBegin;
 
             auto validate_no_value = [](auto& map, size_t key) {
                 if constexpr (validateHashMap) {
@@ -189,7 +194,7 @@ int main(int, char**) {
                 }
             };
 
-            auto validate_has_value = [](auto& map, size_t key, T value) {
+            auto validate_has_value = [](auto& map, Key key, Value value) {
                 if constexpr (validateHashMap) {
                     auto pValue = map.Find(key);
                     if (!pValue || *pValue != value) {
@@ -198,21 +203,30 @@ int main(int, char**) {
                 }
             };
 
+            auto emplace = [&](auto& map, Key key, Value value) {
+                validate_no_value(map, key);
+                auto result = map.Emplace(key, value);
+                if constexpr (validateHashMap) {
+                    if (result == nullptr) {
+                        throw std::runtime_error("Failed to emplace object");
+                    }
+                }
+                validate_has_value(map, key, value);
+            };
+
             // profile emplace
             {
                 auto profileAdd = [&](auto& map) {
                     return getExecutionTime([&]() {
                         for (size_t i = pairsBegin; i < pairsEnd; ++i) {
                             auto&[key, value] = pairs[i];
-                            validate_no_value(map, key);
-                            map.Emplace(key, value);
-                            validate_has_value(map, key, value);
+                            emplace(map, key, value);
                         }
                     });
                 };
 
-                auto duration_a = profileAdd(map_a) / valuesPerStep;
-                auto duration_b = profileAdd(map_b) / valuesPerStep;
+                auto duration_a = profileAdd(map_a) / valuesOnStep;
+                auto duration_b = profileAdd(map_b) / valuesOnStep;
                 passEmplaceDurations.push_back(std::pair{ duration_a, duration_b });
             }
 
@@ -228,8 +242,8 @@ int main(int, char**) {
                     });
                 };
 
-                auto duration_a = profileFind(map_a) / valuesPerStep;
-                auto duration_b = profileFind(map_b) / valuesPerStep;
+                auto duration_a = profileFind(map_a) / valuesOnStep;
+                auto duration_b = profileFind(map_b) / valuesOnStep;
                 passFindDurations.push_back(std::pair{ duration_a, duration_b });
             }
         }
@@ -249,23 +263,34 @@ int main(int, char**) {
 
             auto mean_a = getMean(&std::pair<DurationU, DurationU>::first);
             auto mean_b = getMean(&std::pair<DurationU, DurationU>::second);
-            println(valuesPerStep * step, split, mean_a, split, mean_b);
+            float occupiedElementsPercent = static_cast<float>(valuesPerStep * step * 100) / valuesCount;
+            println(occupiedElementsPercent, split, mean_a, split, mean_b);
         }
     };
 
     {
         println("Adding new elements to hash table");
-        println("Elements count", split, "Knuth hashing", split, "First n bits hashing");
+        println("Occupied elements percent", split, "Linear probing", split, "Quadratic probing");
         showResults(addDurations);
         println();
     }
 
     {
         println("Find existing elements");
-        println("Elements count", split, "Knuth hashing", split, "First n bits hashing");
+        println("Occupied elements percent", split, "Linear probing", split, "Quadratic probing");
         showResults(findDurations);
         println();
     }
+}
 
+int main(int, char**) {
+    try
+    {
+        Main();
+    }
+    catch (const std::exception& ex) {
+        std::cout << "Exception :" << ex.what() << std::endl;
+        return 1;
+    }
     return 0;
 }
