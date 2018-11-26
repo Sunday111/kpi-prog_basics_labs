@@ -45,9 +45,9 @@ struct FirstNBitsHasher {
     }
 
     size_t operator()(T key) const {
-        assert(bytes <= sizeof(key));
         T result = 0;
         constexpr size_t bytes = 2;
+        assert(bytes <= sizeof(key));
         std::memcpy(&result, &key, bytes);
         return result;
     }
