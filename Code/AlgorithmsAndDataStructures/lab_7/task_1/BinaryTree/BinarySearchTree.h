@@ -12,6 +12,8 @@ private:
     using LeafPtr = BinaryTreeLeafPtr<T>;
 
 public:
+    ~BinarySearchTree();
+
     bool Emplace(T value);
     bool HasValue(const T& value);
     void Print(std::ostream& output);
@@ -22,6 +24,20 @@ private:
 private:
     LeafPtr m_root;
 };
+
+template<typename T>
+BinarySearchTree<T>::~BinarySearchTree() {
+    std::vector<LeafPtr> queue;
+    queue.push_back(std::move(m_root));
+    while(!queue.empty()) {
+        auto leaf = std::move(queue.back());
+        queue.pop_back();
+        if (leaf) {
+            queue.push_back(std::move(leaf->GetLink(Direction::Left)));
+            queue.push_back(std::move(leaf->GetLink(Direction::Right)));
+        }
+    }
+}
 
 template<typename T>
 bool BinarySearchTree<T>::Emplace(T value) {
@@ -64,7 +80,7 @@ template<typename T>
 Direction BinarySearchTree<T>::SearchDirection(const BinaryTreeLeaf<T>& root, const T& value) {
     const T& nodeValue = root.GetLeafData();
     assert(nodeValue != value);
-    return nodeValue < value ? Direction::Left : Direction::Right;
+    return value < nodeValue  ? Direction::Left : Direction::Right;
 }
 
 template<typename T>

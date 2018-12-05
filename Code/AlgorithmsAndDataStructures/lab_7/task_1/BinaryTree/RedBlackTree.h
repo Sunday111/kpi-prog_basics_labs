@@ -83,7 +83,7 @@ bool RedBlackTree<T>::HasValue(const T& value) {
             return true;
         }
 
-        const auto dir = SearchDirection(*root, value);
+        const Direction dir = SearchDirection(*root, value);
         root = root->GetLink(dir).get();
     }
 
@@ -94,7 +94,7 @@ template<typename T>
 Direction RedBlackTree<T>::SearchDirection(const Leaf& root, const T& value) {
     const T& nodeValue = root.GetLeafData().GetNodeData();
     assert(nodeValue != value);
-    return nodeValue < value ? Direction::Left : Direction::Right;
+    return value < nodeValue ? Direction::Left : Direction::Right;
 }
 
 template<typename T>
@@ -180,6 +180,8 @@ BinaryTreeLeaf<RedBlackTreeNode<T>>* RedBlackTree<T>::DoubleRotation(Leaf* root,
 template<typename T>
 void RedBlackTree<T>::Print(std::ostream& output) {
     PrintTree<Node>(m_root, output, [](const Leaf& leaf, std::ostream& output) {
-        output << leaf.GetLeafData().GetNodeData();
+        const T& value = leaf.GetLeafData().GetNodeData();
+        const char* color = leaf.GetLeafData().IsRed() ? "R" : "B";
+        output << value << ' ' << color;
     });
 }

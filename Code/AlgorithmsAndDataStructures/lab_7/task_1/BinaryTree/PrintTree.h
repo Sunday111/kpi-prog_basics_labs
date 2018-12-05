@@ -48,6 +48,17 @@ void PrintTree(
     size_t maxDepth = 0;
     size_t maxValuePrintLength = 0;
 
+    auto printLeaf = [&printLeafData](Leaf* leaf, std::ostream& out) {
+        if (leaf) {
+            out << ' ';
+            printLeafData(*leaf, out);
+            out << ' ';
+        }
+        else {
+            out << " null ";
+        }
+    };
+
     auto get_leaf_print_length = [&printLeaf](Leaf* leaf) {
         std::stringstream stream;
         printLeaf(leaf, stream);
@@ -57,6 +68,9 @@ void PrintTree(
     forEachLevel([&](size_t depth, std::vector<Leaf*>& leafs) {
         maxElementsInRow = std::max(leafs.size(), maxElementsInRow);
         maxDepth = depth;
+        for (auto leaf : leafs) {
+            maxValuePrintLength = std::max(maxValuePrintLength, get_leaf_print_length(leaf));
+        }
     });
 
     auto pow = [](size_t val, size_t power) {
@@ -69,17 +83,6 @@ void PrintTree(
 
     size_t nodePrintLength = maxValuePrintLength + 2;
     size_t textMaxWidth = nodePrintLength * maxElementsInRow;
-
-    auto printLeaf = [&printLeafData](Leaf* leaf, std::ostream& out) {
-        if (leaf) {
-            out << ' ';
-            printLeafData(*leaf, out);
-            out << ' ';
-        }
-        else {
-            out << " null ";
-        }
-    };
 
     constexpr char leftCorner = 201ui8;
     constexpr char line = 205ui8;

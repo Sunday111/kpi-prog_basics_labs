@@ -222,7 +222,7 @@ int main(int, char**) {
                     return getExecutionTime([&]() {
                         for (size_t i = pairsBegin; i < pairsEnd; ++i) {
                             auto&[key, value] = pairs[i];
-                            auto pValue = map.Find(key);
+                            const volatile auto pValue = map.Find(key);
                             validate_has_value(map, key, value);
                         }
                     });
