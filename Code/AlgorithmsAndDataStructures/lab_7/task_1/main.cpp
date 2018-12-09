@@ -181,15 +181,6 @@ void Main(Multistream& output) {
         GenerateRandomVector<T>(passValues, valuesCount, true, sortedInput, gen, valueDistribution);
 
         for (size_t step = 0; step < stepsCount; ++step) {
-            //system("cls");
-            //output.PrintLine("Pass ", pass + 1, "/", passesCount);
-            //output.PrintLine("Step ", step + 1, "/", stepsCount);
-            //output.PrintLine(
-            //    ((pass * stepsCount + step) * 100) /
-            //    static_cast<float>(passesCount * stepsCount),
-            //    "% done"
-            //);
-
             auto bstEmplace = stepMeanDuation(bst, emplace, step);
             passInfo.binarySearchTree.emplaceTime.push_back(bstEmplace);
 
