@@ -1,3 +1,4 @@
 cmake_minimum_required(VERSION 3.5.1)
 add_subdirectory(AlgorithmsAndDataStructures)
+add_subdirectory(DiscreteMath)
 add_subdirectory(ProgrammingParadigms)
