@@ -12,9 +12,10 @@ constexpr unsigned GetStringSpacesCount(const char* str) {
     return result;
 }
 
-int main(int, char**) {
+int main(int argc, char** argv) {
     static_assert(GetStringSpacesCount("123") == 0);
     static_assert(GetStringSpacesCount("1 2 3 ") == 3);
     static_assert(GetStringSpacesCount(" ") == 1);
+
     return 0;
 }

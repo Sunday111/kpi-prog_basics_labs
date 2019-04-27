@@ -3,7 +3,7 @@ include(generate_vs_filters)
 include(glob_cxx_sources)
 include(cxx_version)
 
-set(target_name "${projects_prefix}_001")
+set(target_name "${projects_prefix}_002")
 glob_cxx_sources(${CMAKE_CURRENT_SOURCE_DIR} target_sources)
 add_executable(${target_name} ${target_sources})
 generate_vs_filters(${target_sources})
