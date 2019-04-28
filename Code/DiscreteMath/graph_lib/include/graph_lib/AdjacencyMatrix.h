@@ -8,11 +8,11 @@ class GraphAdjacencyMatrix
 {
 public:
 	GraphAdjacencyMatrix(GraphAdjacencyMatrix&&) = default;
-	GraphAdjacencyMatrix(const GraphAdjacencyMatrix&) = delete;
+	GraphAdjacencyMatrix(const GraphAdjacencyMatrix&) = default;
 
     GraphAdjacencyMatrix(size_t verticesCount) :
         m_verticesCount(verticesCount),
-        m_edgeFlags(EdgesCountByVerticesCount(verticesCount), false)
+        m_edgeFlags(EdgesCountByVerticesCount(verticesCount), T{})
 	{
 		Assert(verticesCount > 0, "vertices count > 2");
     }
@@ -23,8 +23,14 @@ public:
         m_edgeFlags[idx] = value;
     }
 
-	[[nodiscard]] decltype(auto) GetEdge(size_t i, size_t j) const {
+	[[nodiscard]] decltype(auto) GetEdgeConst(size_t i, size_t j) const {
 		ValidateIndices(i, j);
+        const size_t idx = EdgeIndex(i, j, m_verticesCount);
+        return m_edgeFlags[idx];
+    }
+
+    [[nodiscard]] decltype(auto) GetEdge(size_t i, size_t j) {
+        ValidateIndices(i, j);
         const size_t idx = EdgeIndex(i, j, m_verticesCount);
         return m_edgeFlags[idx];
     }
@@ -42,7 +48,7 @@ public:
 	}
 
 	GraphAdjacencyMatrix& operator= (GraphAdjacencyMatrix&&) = default;
-	GraphAdjacencyMatrix& operator= (const GraphAdjacencyMatrix&) = delete;
+	GraphAdjacencyMatrix& operator= (const GraphAdjacencyMatrix&) = default;
 
 private:
 	inline void ValidateIndices(size_t i, size_t j) const {

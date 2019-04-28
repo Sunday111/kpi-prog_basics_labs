@@ -34,7 +34,7 @@ int main() {
 
     try
     {
-        auto graph = ReadGraph<true, true>(input, output);
+        auto graph = ReadGraph<bool, true, true>(input, output);
         const size_t startIndex = MustReadValue<size_t>(input, "Enter start vertex index: ");
         const size_t endIndex = MustReadValue<size_t>(input, "Enter end vertex index: ");
 

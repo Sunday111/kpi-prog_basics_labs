@@ -12,7 +12,7 @@ template<bool oriented = false, bool allowLoops = false>
             }
         }
 
-        if (g.GetEdge(v, i)) {
+        if (g.GetEdgeConst(v, i)) {
             ++degree;
         }
     }

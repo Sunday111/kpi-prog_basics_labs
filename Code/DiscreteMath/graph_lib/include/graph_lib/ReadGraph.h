@@ -7,17 +7,11 @@
 #include "AdjacencyMatrix.h"
 #include "InputUtility.h"
 
-template<bool oriented = false, bool allowLoops = false>
-GraphAdjacencyMatrix<bool, oriented, allowLoops> ReadGraph(std::istream& input, std::ostream* output) {
+template<typename T, bool oriented = false, bool allowLoops = false>
+GraphAdjacencyMatrix<T, oriented, allowLoops> ReadGraph(std::istream& input, std::ostream* output) {
 	if (output) {
 		*output << "Enter vertices count: ";
 	}
-
-	const size_t verticesCount = MustReadValue<size_t>(input, "Read vertices count");
-
-	GraphAdjacencyMatrix<bool, oriented, allowLoops> adjacencyMatrix(verticesCount);
-	adjacencyMatrix.SetEdge(0, 1, true);
-	bool val = adjacencyMatrix.GetEdge(1, 0);
 
 	if (output) {
 		if constexpr (oriented) {
@@ -54,10 +48,13 @@ GraphAdjacencyMatrix<bool, oriented, allowLoops> ReadGraph(std::istream& input, 
 		}
 	};
 
+    const size_t verticesCount = MustReadValue<size_t>(input, "Read vertices count");
+    GraphAdjacencyMatrix<T, oriented, allowLoops> adjacencyMatrix(verticesCount);
+
 	do
 	{
-		size_t edgeValue = MustReadValue<size_t>(input, "Read edge between vertices");
-		adjacencyMatrix.SetEdge(i, j, edgeValue);
+		T edgeValue = MustReadValue<T>(input, "Read edge between vertices");
+		adjacencyMatrix.SetEdge(i, j, std::move(edgeValue));
 
 		++j;
 		if (needSwitchRow(i, j, verticesCount)) {

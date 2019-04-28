@@ -65,7 +65,7 @@ void FindLeafs(const GraphAdjacencyMatrix<bool, oriented, loopsAllowed>& g, std:
 
 template<bool oriented, bool loopsAllowed>
 void Main(std::istream& input, std::ostream* output) {
-	auto graphAdjacencyMatrix = ReadGraph<oriented, loopsAllowed>(input, output);
+	auto graphAdjacencyMatrix = ReadGraph<bool, oriented, loopsAllowed>(input, output);
 
 	using CommandFn = std::function<void(const GraphAdjacencyMatrix<bool, oriented, loopsAllowed>&, std::istream&, std::ostream*)>;
 	std::vector<std::tuple<std::string_view, CommandFn>> commands
